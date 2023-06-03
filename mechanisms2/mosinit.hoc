@@ -1,2 +1,0 @@
-chdir("../")
-load_file("init.hoc")
