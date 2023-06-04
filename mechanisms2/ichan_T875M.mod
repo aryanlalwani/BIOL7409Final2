@@ -153,8 +153,8 @@ PROCEDURE rates(v (mV)) {   :Computes rate and other constants at current v.
     stau = 1000*(36.2*exp(-0.5*((v+89.7)/31.3)^2))   	
 
     :"nf" fKDR activation system				
-    alpha = -0.07*vtrap((v+65-47),-6)
-    beta = 0.264/exp((v+65-22)/40)
+    alpha = -0.07*(v+65-47)/(1-exp((v-47)/-6))
+    beta = 0.264*exp((v+65-22)/4)
     sum = alpha+beta        
     nftau = 1/sum      
     nfinf = alpha/sum
