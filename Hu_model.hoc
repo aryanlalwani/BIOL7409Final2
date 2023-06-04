@@ -1,0 +1,353 @@
+load_file("nrngui.hoc")
+
+objref sh, st, axonal, somatodendritic, dendritic_only
+
+create soma
+access soma
+
+
+// --------------------------------------------------
+//    Parameter Settings
+// --------------------------------------------------
+
+/* Global */
+  dt = 0.01
+  celsius   = 37
+  steps_per_ms = 1/dt
+  tstop = 100
+  v_init = -70
+  
+/* Others */
+  delay = 2  // global delay for preparing
+  axonOnSoma=1
+  
+/* Passive membrane */
+  ra        = 150  // decrease ad to decrease of soma vth variability, increase axon's vth variability
+  global_ra = ra
+  rm        = 30000   // g_pas=1/rm
+  c_m       = 0.5
+  cm_myelin = 0.02
+  g_pas_node = 0.02
+
+/* Active channels */
+  // Nav
+  Ena = 60
+  gna12_soma = 80
+  gna12_dend = 80 
+  gna12_ais_max = 3200   // Nav1.2 
+  gna16_ais_max = 3200   // Nav1.6
+  gna16_nakeaxon= 300    
+  gna12_myelin=20       // Nav1.2 at myelins
+  gna16_node = 3200     // Nav1.6 at node
+  
+  vhalf_na12 = -30
+  vhalf_na16 = -43
+//   vhalf_na = -30
+  
+  // Kv
+  Ek = -90  
+  gkv_soma = 20
+  gkv_dend = 10 
+  gkv_axon = 1000
+  
+  // Km
+  gkm = .3
+  gkm_soma = gkm
+  
+  // Kca
+  gkca = 3
+  gkca_soma = gkca
+  
+  // Ca
+  Eca=140
+  gca = .3
+  gca_soma = gca
+
+ 
+/* ----------------------------------------------------------------
+    Define the Axon Geometry
+    
+    Layer 5 cortical pyramidal cell has a long unmyelinated axon!
+    Similar to Mainen et al (Neuron, 1995)
+------------------------------------------------------------------*/ 
+
+n_myelin = 14  // number of myelins and nodes
+create ais[2],hill,nakeaxon,myelin[2],node[2]  // forward declaration
+
+proc create_axon() {
+
+  create ais[10],hill,nakeaxon,myelin[n_myelin],node[n_myelin]
+  
+  // Acquire the equivalent diameter of soma
+  soma {  equiv_diam = sqrt(area(0.5)*nseg/(4*PI))  }   // "*nseg" is needed !!
+  if (numarg()) equiv_diam = $1
+  
+  // Set axonal diameters
+  diamAis=equiv_diam/10
+  diamNakeAxon=equiv_diam/12  
+  diamMyelin=diamAis*1.
+  diamNode=diamAis*0.75    // nodes are thinner than axon
+
+  // Initial segment
+
+hill {                							
+    L = 10							
+    nseg = 10							
+    diam(	0	:	0.25	) = 	6	:	3.8
+    diam(	0.25	:	0.5	) = 	3.8	:	2.8
+    diam(	0.5	:	0.75	) = 	2.8	:	1.7
+    diam(	0.75	:	1	) = 	1.7	:	1.3
+     							
+  }							
+				
+							
+for i=0,9 ais[i] {                 
+    L = 5
+    nseg = 10
+    diam = 1.22
+  }
+
+ais[0]	{						
+    diam(	0	:	1	) = 	1.7	:	1.5
+	}						
+							
+ais[1]	{						
+    diam(	0	:	1	) = 	1.5	:	1.22
+	}		  
+	
+	
+  // Unmylined axon
+  nakeaxon {                
+    L = 400
+    nseg = 100
+    diam = diamNakeAxon
+  }
+
+  // Myelinated axon with nodes of Ranvier
+  for i=0,n_myelin-1 {
+    myelin[i] {         // myelin element
+      nseg = 5
+      L = 100
+      diam = diamMyelin    
+    }
+    node[i] {           // nodes of Ranvier
+      nseg = 1
+      L = 1           
+      diam = diamNode     
+    }
+  }
+
+  // Connecting
+  
+  soma connect hill(0), axonOnSoma       // dend11 -> soma(0) -> soma(1) -> hill
+  hill connect ais[0] (0), 1      // hill -> ais[0]
+  for i=0,8 ais[i] {              // ais[0] -> ... -> ais[9]
+    connect ais[i+1] (0), 1
+  }
+  ais[9] connect nakeaxon(0), 1        // ais[9] -> nakeaxon
+  nakeaxon connect myelin[0] (0), 1    // nakeaxon -> myelin[0]
+  myelin[0] connect node[0](0), 1            // myelin[0] -> node[0]
+  for i=1,n_myelin-1  {                    // (myelin[0] node[0]) -> ... -> (myelin[n_myelin] node[n_myelin]) 
+      node[i-1] connect myelin[i](0), 1 
+      myelin[i] connect node[i](0), 1
+  }
+
+}
+
+// --------------------------------------------------------------
+// Spines
+// --------------------------------------------------------------
+
+      // Based on the "Folding factor" described in
+      // Jack et al (1989), Major et al (1994)
+      // note, this assumes active channels are present in spines 
+      // at same density as dendrites
+
+spine_dens = 1
+      // just using a simple spine density model due to lack of data on some 
+      // neuron types.
+
+spine_area = 0.83 // um^2  -- K Harris
+
+proc add_spines() { local a
+  forsec $o1 {
+    a =0
+    for(x) a=a+area(x)
+
+    F = (L*spine_area*spine_dens + a)/a
+
+    L = L * F^(2/3)
+    for(x) diam(x) = diam(x) * F^(1/3)
+  }
+}
+
+
+proc install_passive() {
+    
+  // Forall
+  forall {
+    insert pas
+    Ra = ra 
+    cm = c_m 
+    g_pas = 1/rm
+    e_pas = v_init
+  }
+
+  soma.cm=1
+  // Exceptions along the myelinated axon
+  forsec "myelin" cm = cm_myelin
+  forsec "node" g_pas = g_pas_node
+}
+
+
+// --------------------------------------------
+//  Install Active Channels
+// --------------------------------------------
+
+proc  install_channels() {
+
+  /* Add all kinds of channels to all sections*/  
+    forall {
+    //   insert na gbar_na=0
+      insert na12  gbar_na12=0
+      insert na16  gbar_na16=0
+      insert kv    gbar_kv=0
+      insert km    gbar_km=0
+      insert kca   gbar_kca=0
+      insert ca    gbar_ca=0
+     }
+  
+    // Added by Hu    
+    vshift_na12 = -35 - vhalf_na12 -10  // negative shift of input voltage, high threshold  -30mV    
+    vshift_na16 = -35 - vhalf_na16 -10    // positive shift of input voltage, low threshold  -43mV
+    // vshift_na = -35 - vhalf_na -10  // the same as Na12
+
+  
+  
+  /* Channel Constants */         
+    forall if(ismembrane("k_ion")) ek = Ek
+    forall if(ismembrane("na_ion")) ena = Ena
+    forall if(ismembrane("ca_ion")) {
+      eca = Eca
+      ion_style("ca_ion",0,1,0,0,0)
+      vshift_ca = 0
+    }
+  
+  /* Somatodendritic */
+    forsec somatodendritic {
+      gbar_na12 = gna12_dend    // 80
+      gbar_kv = gkv_dend        // 20                            
+      gbar_km  = gkm            // 0.3                           
+      gbar_kca = gkca           // 0.3                           
+      gbar_ca = gca             // 0.3                           
+      insert cad                // Internal calcium concentration mechanism only at somatodendritic region.
+    }
+    soma {
+      gbar_na12 =gna12_soma          // 80
+      gbar_kv = gkv_soma            // 20 
+      gbar_km = gkm_soma            // 0.3
+      gbar_kca = gkca_soma          // 0.3
+      gbar_ca = gca_soma            // 0.3
+    }
+  
+  /* hill -> ais[0] -> ... -> ais[9] */
+    
+    // Nav 1.2   ( gna12_ais_max=3200, refer to "Nav% iseg.xls")   
+    hill.gbar_na12= gna12_ais_max     		*	1	*	0.8                     
+    ais[0]. gbar_na12= gna12_ais_max      *	0.96	*	1                  								
+    ais[1]. gbar_na12= gna12_ais_max  		*	0.9	*	1                    
+    ais[2]. gbar_na12= gna12_ais_max  		*	0.75	*	1                  
+    ais[3]. gbar_na12= gna12_ais_max  		*	0.55	*	0.95               
+    ais[4]. gbar_na12= gna12_ais_max  		*	0.366985879	*	0.880142857  
+    ais[5]. gbar_na12= gna12_ais_max  		*	0.2	*	0.75                 
+    ais[6]. gbar_na12= gna12_ais_max  		*	0.100330761	*	0.647857143  
+    ais[7]. gbar_na12= gna12_ais_max  		*	0.011532125	*	0.520285714  
+    ais[8]. gbar_na12= gna12_ais_max  		*	0	*	0.428571429            
+    ais[9]. gbar_na12= gna12_ais_max  		*	0	*	0.342857143            
+  	
+    // Nav 1.6  ( gna16_ais_max=3200, refer to "Nav% iseg.xls" )
+    hill.gbar_na16 = gna16_ais_max	    *	0	*	0.8 
+    ais[0]. gbar_na16 = gna16_ais_max	*	0.04	*	1   
+    ais[1]. gbar_na16 = gna16_ais_max	*	0.1	*	1   
+    ais[2]. gbar_na16 = gna16_ais_max	*	0.25	*	1   
+    ais[3]. gbar_na16 = gna16_ais_max	*	0.45	*	0.95   
+    ais[4]. gbar_na16 = gna16_ais_max	*	0.633014121	*	0.880142857   
+    ais[5]. gbar_na16 = gna16_ais_max	*	0.8	*	0.75   
+    ais[6]. gbar_na16 = gna16_ais_max	*	0.899669239	*	0.647857143   
+    ais[7]. gbar_na16 = gna16_ais_max	*	0.988467875	*	0.520285714   
+    ais[8]. gbar_na16 = gna16_ais_max	*	1	*	0.428571429   
+    ais[9]. gbar_na16 = gna16_ais_max	*	1	*	0.342857143   
+                                     
+    // Kv delayed rectifier channels  ( gkv_axon=1000 )
+    hill.gbar_kv = gkv_axon	*	0.1              
+    ais[0]. gbar_kv = gkv_axon	*	0.2 
+    ais[1]. gbar_kv = gkv_axon	*	0.3 
+    ais[2]. gbar_kv = gkv_axon	*	0.4 
+    ais[3]. gbar_kv = gkv_axon	*	0.5 
+    ais[4]. gbar_kv = gkv_axon	*	0.6 
+    ais[5]. gbar_kv = gkv_axon	*	0.7 
+    ais[6]. gbar_kv = gkv_axon	*	0.8 
+    ais[7]. gbar_kv = gkv_axon	*	0.9
+    ais[8]. gbar_kv = gkv_axon	*	1
+    ais[9]. gbar_kv = gkv_axon	*	1
+    
+    
+  /*  Nakeaxon */
+    nakeaxon  {
+      gbar_na16 = gna16_nakeaxon	    // 300, artificial (ought to be 1600)
+      gbar_na12 = 0
+      gbar_kv = 1500
+    }  
+    
+  /* ( Myelin[0] Node[0] ) -> ... -> ( Myelin[n_myelin] Node[n_myelin] )  */
+    forsec "myelin" gbar_na12 = gna12_myelin    // 20
+    forsec "node" gbar_na16 = gna16_ais_max/2  // 1600 
+
+}
+
+proc load_3dcell() {
+
+// $s1 filename
+
+    aspiny = 0
+    forall delete_section()
+    xopen($s1)
+    access soma
+
+    somatodendritic = new SectionList()
+    forall {
+        if (L/nseg>40) {
+        nseg = L/40 + 1 
+        }    // make sure no segments exceed 40 uM length. Note, soma.nseg remains 10.
+        somatodendritic.append()  // soma and dendrites are all included
+    }
+
+    // // make sure no compartments exceed 50 uM length
+    // forall {
+    //     diam_save = diam
+    //     n = L/50
+    //     nseg = n + 1
+    //     if (n3d() == 0) diam = diam_save
+    //     somatodendritic.append()
+    // }    
+
+    dendritic_only = new SectionList()
+    forsec somatodendritic dendritic_only.append()
+    soma  dendritic_only.remove()
+
+    create_axon()
+
+    if (!aspiny) {
+    add_spines(dendritic_only,spine_dens)
+    }
+    distance(0,1) 
+  
+  
+    // Install passive membrane properties
+    install_passive()  
+    // Install active channels
+    install_channels()
+  
+}
+
+load_3dcell("cells/P_Soma_Dendrites.hoc") 
