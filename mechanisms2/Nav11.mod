@@ -93,10 +93,10 @@ PROCEDURE rates(q10){
 	if (v-vShift == vthis){
       v = v + 0.0001
     }
-	:sInf = 1/(1 + exp(((v-vShift) - vthis)/qs))
-	:sTau = stau_scale*1000*(106.7*exp(-0.5*(((v-vShift) - -52.7)/18.3)^2))/qt		
-	sInf = 1/(1+exp(((v-vShift) - vthis)/qs))		
-	sTau = stau_scale*1000*(140.4*exp(-0.5*((v+71.3)/30.9)^2))/qt
+	sInf = 1/(1 + exp(((v-vShift) - vthis)/qs))
+	sTau = stau_scale*1000*(106.7*exp(-0.5*(((v-vShift) - -52.7)/18.3)^2))/qt		
+	:sInf = 1/(1+exp(((v-vShift) - vthis)/qs))		
+	:sTau = stau_scale*1000*(140.4*exp(-0.5*((v+71.3)/30.9)^2))/qt
 	
 	UNITSON
 }
