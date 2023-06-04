@@ -25,8 +25,8 @@ PARAMETER	{
 	vthis = -46.0 (mV) : v 1/2 for slow inactivation (s) - 2005 paper 
 	qa = 4.9 (1) : activation slope
 	qi = 7.7 (1) : inactivation slope	    
-    :qs = 5.4 (1) : slow inactivation slow - 2004 paper
-	qs = 6.6 (1) : slow inactivation slow - 2005 paper
+    	qs = 5.4 (1) : slow inactivation slow - 2004 paper
+     :qs = 6.6 (1) : slow inactivation slow - 2005 paper
 	q10  = 2.3			: temperature sensitivity
     stau_scale = 1 (1) : scaling factor for slow inactivation (sTau)
     htau_scale = 1 (1) : scaling factor for fast inactivation (hTau)
