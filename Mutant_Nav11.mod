@@ -1,7 +1,7 @@
 :Reference :Colbert and Pan 2002
 
 NEURON	{
-	SUFFIX nav11_T875M
+	SUFFIX nav11_mut
 	USEION na READ ena WRITE ina
 	RANGE gbar, g, ina, vtha, vthi, vthis, qa, qi, qs
 	RANGE m, n, s, stau_scale, htau_scale 
